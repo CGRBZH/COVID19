@@ -1,0 +1,144 @@
+---
+title: "COVID19_curve"
+output: html_document
+---
+
+<b>Author:</b> Corinna Grobe
+<br>
+<b>Topic:</b> Modelling the exponential growth of the COVID19 cases in Switzerland. 
+<br>
+<p> Numerous reports focus on the development of case numbers over time. But hardly anyone talks about the growth and whether the measures we are taking in the fight against COVID19 are having an effect, in other words: are we beating the virus?</p>
+
+<p>In mathematical epidemiology, time has no influence on the development of case numbers. In the SIR model, the three decisive variables are: Susceptible, Infected, Removed.</p>
+<p>Therefore, in my presentation of the case numbers I will show new cases ~ Total confirmed cases. This is a better way to graph cases using a logarithmic scale in "phase space" - plotting the growth rate against the cumulative cases, rather than either of these against time. In this way it can be seen whether the growth is slowing down, i.e. whether the case numbers are no longer developing exponentially.</p>
+
+<p>Inspiration for this presentation comes from this video by minutephysics (https://www.youtube.com/watch?v=54XLXg4fYsc) and the underlying dashboard build by Aatish Bhatia (https://github.com/aatishb/covid/blob/master/curvefit.ipynb).</p>
+
+<p>Here's Ben Spark explaining the SIR model in a wonderfully simple and understandable manner: https://www.youtube.com/watch?v=k6nLfCbAzgo</p>
+
+
+<b>Variables:</b> <br>
+<ul>
+<li>Date: Date cases were reported</li>
+<li>Cases: Number of people tested positive on that date</li>
+<li>Total_Cases: Cumulative count of cases as of that date</li>
+<li>New_Cases: Number of cases compared to the previous date</li>
+<li>Week: Grouping dates to calendar weeks according to ISO8601</li></ul>
+<b>Source:</b> Bundesamt für Gesundheit (BAG), Daten des Situationsberichtes, Last retrieved: 31.03.2020
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# knitr::opts_knit$set(root.dir = "")
+
+```
+<br>
+<h2>Loading libraries</h2>
+<br>
+```{r warning=FALSE, message=FALSE}
+
+library(dplyr) # Version ‘0.8.4’
+library(ggplot2) # Version ‘3.1.0’
+library(statR) # Version ‘0.0.0.9000’
+library(plotly) # Version ‘4.8.0’
+
+```
+
+<br>
+<h2>Data import</h2>
+<br>
+*Comment:* COVID-19 case numbers since the introduction of mandatory reporting in Switzerland
+<br>
+```{r echo = FALSE}
+
+data <- read_excel("200325_Datengrundlage_Grafiken_COVID-19-Bericht.xlsx") %>% 
+  rename(Date = Falldatum,
+         Cases = "Bestätigte Fälle")
+
+head(data)
+
+```
+<br>
+<h2>Calculating</h2>
+<br>
+<h3>Calculating change per day</h3>
+<br>
+```{r echo = FALSE}
+
+daily_data <- data %>% 
+  # Adding calendar weeks; Monday as the first day of the week
+  mutate(Week = format(Date, '%Y-%V'),
+         # Cumulative count of total cases
+         Daily_Total = cumsum(Cases),
+         # New cases per day; first value returned to be 0 as there is no change
+         Daily_New = Daily_Total - lag(Daily_Total, default = first(Daily_Total)))
+  
+head(daily_data)
+
+```
+
+<br>
+<h3>Calculating change per week</h3>
+<br>
+
+```{r echo = FALSE}
+
+weekly_data <- daily_data %>% 
+  group_by(Week) %>%
+  mutate(Weekly_Total = cumsum(Daily_Total),
+         Weekly_New = sum(Daily_New)) %>%
+  select(Week, Weekly_Total, Weekly_New) %>% 
+  distinct(., Week, .keep_all = TRUE)
+
+head(weekly_data)
+
+```
+
+<br>
+<h2>Plotting the curve</h2>
+<br>
+<h3>Plotting Total Cases vs. New Cases for each day</h3>
+<br>
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+
+ggplot(daily_data, 
+       aes(x = Daily_Total, 
+           y = Daily_New, 
+           group = 1)) + 
+  geom_point() +
+  geom_path() +
+  # Count data > Log transformation
+  scale_x_continuous(trans='log10', name="Total confirmed cases (log10 scale)") +
+  scale_y_continuous(trans='log10', name="New cases to previous day (log10 scale)") +
+  labs(title = "COVID19 Cases Switzerland: New Cases Per Day vs Total Cases",
+       subtitle = "Feb 24 - Mar 30, 2020 (last retrieved: Mar 31, 2020)",
+       caption = "Source: Bundesamt für Gesundheit, Daten des Situationsberichtes") +
+  theme_stat()
+
+```
+<br>
+<h2>Plotting Total Cases vs. New Cases for each week</h2>
+<br>
+<p> Time is implied. Each point represents the calendar week starting with week 9 on the left and moving to week 14 on the right.</p>
+
+<p style="color: red"> **Week 14 currently ongoing. Weekly data not fully available yet.**</p>
+<br>
+```{r echo = FALSE}
+
+ggplot(weekly_data, 
+       aes(x = Weekly_Total, 
+           y = Weekly_New, 
+           group = 1)) + 
+  geom_point() +
+  geom_path() +
+  # Count data > Log transformation
+  scale_x_continuous(trans='log10', name="Total confirmed cases (log10 scale)") +
+  scale_y_continuous(trans='log10', name="New cases to previous week (log10 scale)") +
+  labs(title = "COVID19 Cases Switzerland: New Cases Per Week vs Total Cases",
+       subtitle = "Calendar week 9-14 (data last retrieved: Mar 31, 2020)",
+       caption = "Source: Bundesamt für Gesundheit, Daten des Situationsberichtes") +
+  theme_stat()
+
+
+```
+
+
